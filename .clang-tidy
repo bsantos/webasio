@@ -1,0 +1,68 @@
+---
+  Checks:          '-*,
+
+                     clang-analyzer-*,
+
+                     bugprone-*,
+                    -bugprone-exception-escape,
+                    -bugprone-lambda-function-name,
+                    -bugprone-easily-swappable-parameters,
+
+                     cppcoreguidelines-*,
+                    -cppcoreguidelines-avoid-c-arrays,
+                    -cppcoreguidelines-avoid-magic-numbers,
+                    -cppcoreguidelines-pro-type-member-init,
+                    -cppcoreguidelines-pro-type-reinterpret-cast,
+                    -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+                    -cppcoreguidelines-pro-bounds-constant-array-index,
+                    -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+
+                     google-*,
+                    -google-upgrade-googletest-case,
+                    -google-readability-namespace-comments,
+                    -google-readability-braces-around-statements,
+
+                     cert-env33-c,
+                     cert-err33-c,
+                     cert-err34-c,
+                     cert-err60-cpp,
+                     cert-flp30-c,
+                     cert-mem57-cpp,
+                     cert-msc50-cpp,
+                     cert-msc51-cpp,
+                     cert-oop57-cpp,
+                     cert-oop58-cpp,
+
+                     misc-misleading-identifier,
+                     misc-redundant-expression,
+                     misc-uniqueptr-reset-release,
+
+                     modernize-*,
+                    -modernize-avoid-c-arrays,
+                    -modernize-raw-string-literal,
+                    -modernize-use-trailing-return-type,
+
+                     readability-*,
+                    -readability-magic-numbers,
+                    -readability-qualified-auto,
+                    -readability-implicit-bool-conversion,
+                    -readability-braces-around-statements,
+                    -readability-function-cognitive-complexity,
+                    -readability-convert-member-functions-to-static,
+
+                     performance-*
+                   '
+
+  CheckOptions:
+    - key:          bugprone-dangling-handle.HandleClasses
+      value:        ::std::basic_string_view;::std::span
+    - key:          bugprone-string-constructor.StringNames
+      value:        ::std::basic_string;::std::basic_string_view
+    - key:          modernize-use-default-member-init.UseAssignment
+      value:        1
+    - key:          modernize-use-emplace.IgnoreImplicitConstructors
+      value:        1
+    - key:          performance-unnecessary-value-param.AllowedTypes
+      value:        ::boost::json::object;::boost::json::value;
+  HeaderFilterRegex: '-deps/*,*'
+...
