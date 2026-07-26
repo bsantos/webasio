@@ -9,9 +9,7 @@
 
 #include <webasio/assert.hpp>
 #include <webasio/coro/detail/deferred_awaitable.hpp>
-#include <webasio/coro/detail/getter_awaitable.hpp>
 #include <webasio/coro/detail/dispatch_handler.hpp>
-#include <webasio/coro/this_coro.hpp>
 #include <webasio/memory_cache.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
@@ -186,71 +184,6 @@ struct promise_frame : promise_frame_base<Ts...> {
     auto await_transform(T&& value) -> decltype(promise_awaitable<std::decay_t<T>>::get(*this, std::forward<T>(value)))
     {
         return promise_awaitable<std::decay_t<T>>::get(*this, std::forward<T>(value));
-    }
-
-    auto await_transform(this_coro::executor_t) noexcept
-    {
-        return detail::getter_awaitable<boost::asio::any_io_executor const&> { get_executor() };
-    }
-
-    auto await_transform(this_coro::cancelled_t) noexcept
-    {
-        return detail::getter_awaitable<boost::asio::cancellation_type> { cancellation_state.cancelled() };
-    }
-
-    auto await_transform(this_coro::cancellation_slot_t) noexcept
-    {
-        return detail::getter_awaitable<boost::asio::cancellation_slot> { get_cancellation_slot() };
-    }
-
-    auto await_transform(this_coro::set_cancellation_slot_t arg)
-    {
-        cancellation_slot = arg.slot;
-        cancellation_state = boost::asio::cancellation_state {};
-        return std::suspend_never { };
-    }
-
-    auto await_transform(this_coro::reset_cancellation_state_t<void>)
-    {
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot };
-        return std::suspend_never { };
-    }
-
-    auto await_transform(this_coro::reset_cancellation_state_t<this_coro::set_cancellation_slot_t> arg)
-    {
-        cancellation_slot = arg.slot;
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot };
-        return std::suspend_never { };
-    }
-
-    template<class Filter>
-    auto await_transform(this_coro::reset_cancellation_state_t<void, Filter> arg)
-    {
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot, std::move(arg.filter) };
-        return std::suspend_never { };
-    }
-
-    template<class Filter>
-    auto await_transform(this_coro::reset_cancellation_state_t<this_coro::set_cancellation_slot_t, Filter> arg)
-    {
-        cancellation_slot = arg.slot;
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot, std::move(arg.filter) };
-        return std::suspend_never { };
-    }
-
-    template<class InFilter, class OutFilter>
-    auto await_transform(this_coro::reset_cancellation_state_t<void, InFilter, OutFilter> arg)
-    {
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot, std::move(arg.in_filter), std::move(arg.out_filter) };
-        return std::suspend_never { };
-    }
-
-    template<class InFilter, class OutFilter>
-    auto await_transform(this_coro::reset_cancellation_state_t<this_coro::set_cancellation_slot_t, InFilter, OutFilter> arg)
-    {
-        cancellation_slot = arg.slot;
-        cancellation_state = boost::asio::cancellation_state { cancellation_slot, std::move(arg.in_filter), std::move(arg.out_filter) };
-        return std::suspend_never { };
     }
 };
 

@@ -7,6 +7,10 @@
 
 #pragma once
 
+#include <coroutine>
+#include <utility>
+
+
 namespace webasio::coro::detail {
 
 template<class T, class U = T>

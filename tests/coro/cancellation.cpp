@@ -43,50 +43,50 @@ struct coro_test {
 
     webasio::co_detached test1(std::chrono::seconds duration)
     {
-        co_await webasio::this_coro::reset_cancellation_state(cancel.slot());
+        co_await webasio::coro::reset_cancellation_state(cancel.slot());
         co_await webasio::coro::dispatch(ioc.get_executor());
 
         aborted = co_await foo(duration);
-        cancelled = co_await webasio::this_coro::cancelled;
+        cancelled = co_await webasio::coro::cancelled;
         completed = true;
     }
 
     webasio::co_detached test2()
     {
-        co_await webasio::this_coro::reset_cancellation_state(cancel.slot());
+        co_await webasio::coro::reset_cancellation_state(cancel.slot());
 
         aborted = co_await bar();
-        cancelled = co_await webasio::this_coro::cancelled;
+        cancelled = co_await webasio::coro::cancelled;
         completed = true;
     }
 
     webasio::co_detached test3()
     {
-        co_await webasio::this_coro::reset_cancellation_state(cancel.slot());
+        co_await webasio::coro::reset_cancellation_state(cancel.slot());
         boost::asio::ip::udp::socket socket { ioc, boost::asio::ip::udp::v4() };
         char buffer[256];
 
         auto [ec, _] = co_await socket.async_receive(boost::asio::buffer(buffer), boost::asio::cancel_after(std::chrono::seconds(1)));
         aborted = ec == boost::asio::error::operation_aborted;
-        cancelled = co_await webasio::this_coro::cancelled;
+        cancelled = co_await webasio::coro::cancelled;
         completed = true;
     }
 
     webasio::co_detached foo4()
     {
         webasio::coro::multicast_cancellation_signal signal { multi_cancel };
-        co_await webasio::this_coro::reset_cancellation_state(signal.slot());
+        co_await webasio::coro::reset_cancellation_state(signal.slot());
         co_await webasio::coro::dispatch(ioc.get_executor());
         aborted = co_await foo(std::chrono::seconds(3600));
-        cancelled = co_await webasio::this_coro::cancelled;
+        cancelled = co_await webasio::coro::cancelled;
     }
 
     webasio::co_detached bar4()
     {
         webasio::coro::multicast_cancellation_signal signal { multi_cancel };
-        co_await webasio::this_coro::reset_cancellation_state(signal.slot());
+        co_await webasio::coro::reset_cancellation_state(signal.slot());
         aborted = co_await bar();
-        completed = co_await webasio::this_coro::cancelled == boost::asio::cancellation_type::terminal;
+        completed = co_await webasio::coro::cancelled == boost::asio::cancellation_type::terminal;
     }
 
     void test4()
