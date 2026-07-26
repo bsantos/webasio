@@ -1,6 +1,8 @@
 #include <boost/test/unit_test.hpp>
 
 #include <webasio/coro/detached.hpp>
+#include <webasio/coro/dispatch.hpp>
+#include <webasio/coro/post.hpp>
 #include <webasio/coro/promise.hpp>
 
 #include <boost/asio/io_context.hpp>
@@ -24,14 +26,14 @@ struct coro_test {
 
     webasio::co_detached dispatch1()
     {
-        co_await webasio::this_coro::dispatch(ioc1.get_executor());
+        co_await webasio::coro::dispatch(ioc1.get_executor());
         tid1 = co_await get_thread_id();
         completed = true;
     }
 
     webasio::co_detached dispatch2()
     {
-        co_await webasio::this_coro::dispatch(ioc2.get_executor());
+        co_await webasio::coro::dispatch(ioc2.get_executor());
         tid2 = co_await get_thread_id();
         completed = true;
     }
@@ -45,7 +47,7 @@ struct coro_test {
 
     webasio::co_promise<void> foo1()
     {
-        co_await webasio::this_coro::dispatch(ioc1.get_executor());
+        co_await webasio::coro::dispatch(ioc1.get_executor());
         tid1 = co_await get_thread_id();
     }
 
@@ -54,7 +56,8 @@ struct coro_test {
         auto guard1 = boost::asio::make_work_guard(ioc1);
         auto guard2 = boost::asio::make_work_guard(ioc2);
 
-        co_await webasio::this_coro::dispatch(ioc2.get_executor());
+        co_await webasio::coro::post(ioc1.get_executor());
+        co_await webasio::coro::dispatch(ioc2.get_executor());
         co_await foo1();
         tid2 = co_await get_thread_id();
         completed = true;

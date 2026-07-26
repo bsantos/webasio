@@ -15,21 +15,7 @@
 
 namespace webasio::this_coro {
 
-struct post_t { boost::asio::any_io_executor executor; };
-struct dispatch_t { boost::asio::any_io_executor executor; };
 struct executor_t { };
-
-template<class Executor>
-inline post_t post(Executor&& executor) noexcept
-{
-    return { std::forward<Executor>(executor) };
-}
-
-template<class Executor>
-inline dispatch_t dispatch(Executor&& executor) noexcept
-{
-    return { std::forward<Executor>(executor) };
-}
 
 inline constexpr executor_t executor;
 

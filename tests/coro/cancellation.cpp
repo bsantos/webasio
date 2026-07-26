@@ -3,6 +3,7 @@
 
 #include <webasio/coro/cancellation.hpp>
 #include <webasio/coro/detached.hpp>
+#include <webasio/coro/dispatch.hpp>
 #include <webasio/coro/promise.hpp>
 #include <webasio/scoped_final.hpp>
 #include <webasio/logger.hpp>
@@ -42,7 +43,7 @@ struct coro_test {
     webasio::co_detached test1(std::chrono::seconds duration)
     {
         co_await webasio::this_coro::reset_cancellation_state(cancel.slot());
-        co_await webasio::this_coro::dispatch(ioc.get_executor());
+        co_await webasio::coro::dispatch(ioc.get_executor());
 
         aborted = co_await foo(duration);
         cancelled = co_await webasio::this_coro::cancelled;
@@ -74,7 +75,7 @@ struct coro_test {
     {
         webasio::coro::multicast_cancellation_signal signal { multi_cancel };
         co_await webasio::this_coro::reset_cancellation_state(signal.slot());
-        co_await webasio::this_coro::dispatch(ioc.get_executor());
+        co_await webasio::coro::dispatch(ioc.get_executor());
         aborted = co_await foo(std::chrono::seconds(3600));
         cancelled = co_await webasio::this_coro::cancelled;
     }

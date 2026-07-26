@@ -15,9 +15,8 @@
 #include <webasio/coro/this_coro.hpp>
 #include <webasio/memory_cache.hpp>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/cancellation_state.hpp>
-#include <boost/asio/dispatch.hpp>
-#include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 
@@ -28,6 +27,9 @@ template<class... Ts>
 class promise;
 
 namespace detail {
+
+template<class T>
+struct promise_awaitable;
 
 template<class... Ts>
 struct promise_frame_base {
@@ -181,49 +183,10 @@ struct promise_frame : promise_frame_base<Ts...> {
         return detail::deferred_awaitable<promise_frame, void(Args...), Initiation, InitArgs...> { *this, std::move(op) };
     }
 
-    auto await_transform(this_coro::post_t arg) noexcept
+    template<class T>
+    auto await_transform(T&& value) -> decltype(promise_awaitable<std::decay_t<T>>::get(*this, std::forward<T>(value)))
     {
-        struct awaitable : std::suspend_always {
-            boost::asio::any_io_executor const& executor_;
-
-            awaitable(boost::asio::any_io_executor const& ex)
-                : executor_ { ex }
-            {}
-
-            void await_suspend(std::coroutine_handle<> h) const noexcept
-            {
-                boost::asio::post(executor_, detail::dispatch_handler<> { h });
-            }
-        };
-
-        set_executor(std::move(arg.executor));
-        return awaitable { get_executor() };
-    }
-
-    auto await_transform(this_coro::dispatch_t arg) noexcept
-    {
-        struct awaitable : std::suspend_always, detail::resume_context<awaitable> {
-            using context = detail::resume_context<awaitable>;
-
-            boost::asio::any_io_executor const& executor_;
-
-            awaitable(boost::asio::any_io_executor const& ex)
-                : executor_ { ex }
-            {}
-
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept
-            {
-                boost::asio::dispatch(executor_, detail::dispatch_handler<awaitable> { *this, h });
-
-                if (this->resume_awaiting(h))
-                    return h;
-
-                return std::noop_coroutine();
-            }
-        };
-
-        set_executor(std::move(arg.executor));
-        return awaitable { get_executor() };
+        return promise_awaitable<std::decay_t<T>>::get(*this, std::forward<T>(value));
     }
 
     auto await_transform(this_coro::executor_t) noexcept
