@@ -76,17 +76,28 @@ void system_log(log_level lvl, std::string_view entry)
 std::string to_string(std::chrono::system_clock::time_point tp)
 {
 	auto time = std::chrono::system_clock::to_time_t(tp);
+	auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(tp - std::chrono::time_point_cast<std::chrono::seconds>(tp));
 	auto tm = std::localtime(&time);
 	std::string str;
 
 	str.resize(128);
-	auto sz = std::strftime(str.data(), str.size() + 1, "%c", tm);
+	auto sz = std::strftime(str.data(), str.size() + 1, "%F %T", tm);
 	while (!sz) [[unlikely]] {
 		str.resize(str.size() * 2);
-		sz = std::strftime(str.data(), str.size() + 1, "%c", tm);
+		sz = std::strftime(str.data(), str.size() + 1, "%F %T", tm);
 	}
 
 	str.resize(sz);
+
+	if (msec.count() < 10)
+		str += ".00";
+	else if (msec.count() < 100)
+		str += ".0";
+	else
+		str += '.';
+
+	str += std::to_string(msec.count());
+
 	return str;
 }
 
