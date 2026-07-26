@@ -9,6 +9,7 @@
 
 #include <webasio/logger.hpp>
 #include <webasio/coro/dispatch.hpp>
+#include <webasio/coro/executor.hpp>
 #include <webasio/coro/sleep.hpp>
 
 #include <boost/asio/signal_set.hpp>
@@ -53,12 +54,12 @@ co_detached do_sleep(boost::asio::any_io_executor ex, std::chrono::seconds d)
 co_promise<void> test_sleep()
 {
 	for (size_t i = 0; i < 1000; ++i)
-		do_sleep(co_await this_coro::executor, std::chrono::seconds(i & 0x3));
+		do_sleep(co_await coro::executor, std::chrono::seconds(i & 0x3));
 }
 
 co_promise<void> wait_for_signal()
 {
-	boost::asio::signal_set sig { co_await this_coro::executor, SIGINT, SIGTERM };
+	boost::asio::signal_set sig { co_await coro::executor, SIGINT, SIGTERM };
 	example_log.info("waiting for signal");
 	auto [ec, sig_num] = co_await sig.async_wait();
 	if (sig_num == SIGTERM)

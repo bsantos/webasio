@@ -8,6 +8,7 @@
 #include "coro.hpp"
 #include "test.hpp"
 
+#include <webasio/coro/executor.hpp>
 #include <webasio/coro/main.hpp>
 #include <webasio/logger.hpp>
 
@@ -22,10 +23,10 @@ inline constexpr logger main_log { "main" };
 coro::main co_main(std::span<std::string_view> args)
 {
 	main_log.info("begin test()");
-	co_await test(static_cast<boost::asio::io_context&>(boost::asio::query(co_await this_coro::executor, boost::asio::execution::context)));
+	co_await test(static_cast<boost::asio::io_context&>(boost::asio::query(co_await coro::executor, boost::asio::execution::context)));
 	main_log.info("end test()");
 	main_log.info("do_nothing(): ", co_await do_nothing());
-	say_hello(co_await this_coro::executor);
+	say_hello(co_await coro::executor);
 	co_await test_sleep();
 	co_await sleep();
 	co_await wait_for_signal();

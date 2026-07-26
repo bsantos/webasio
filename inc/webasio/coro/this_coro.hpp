@@ -15,11 +15,6 @@
 
 namespace webasio::this_coro {
 
-struct executor_t { };
-
-inline constexpr executor_t executor;
-
-
 struct cancelled_t {};
 struct set_cancellation_slot_t { boost::asio::cancellation_slot slot; };
 struct cancellation_slot_t {
