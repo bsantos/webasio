@@ -1,46 +1,44 @@
 #pragma once
 
+#include <webasio/coro/detail/resume_context.hpp>
 #include <webasio/coro/unique_handle.hpp>
 #include <webasio/memory_cache.hpp>
 
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/associated_immediate_executor.hpp>
-#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/inline_or_executor.hpp>
 
 
 namespace webasio::coro::detail {
 
-template<class Frame, class Awaitable>
-struct completion_handler {
+template<class Awaitable>
+class completion_handler {
     using shared_this_t = std::shared_ptr<void const>;
     using weak_this_t = std::weak_ptr<void const>;
 
-    Frame& frame_;
-    Awaitable& awaitable_;
-    unique_handle<> handle_;
-    weak_this_t weak_this_;
-    bool restore_shared_this_;
-
-    completion_handler(Frame& f, Awaitable& aw, std::coroutine_handle<> h)
-        : frame_ { f }
-        , awaitable_ { aw }
+public:
+    completion_handler(resume_context<Awaitable>& ctx, std::coroutine_handle<> h, shared_this_t& shared_this)
+        : context_ { ctx }
         , handle_ { h }
-        , weak_this_ { f.shared_this }
-        , restore_shared_this_ { f.shared_this }
+        , weak_this_ { shared_this }
+        , restore_shared_this_ { shared_this }
     {}
 
-    completion_handler(Frame& f, Awaitable& aw, unique_handle<> h)
-        : frame_ { f }
-        , awaitable_ { aw }
-        , handle_ { std::move(h) }
-    {}
+    ~completion_handler()
+    {
+        // we can only destroy the coroutine if the awaitable allows it
+        if (handle_)
+            context_.destroy(handle_.release());
+    }
+
+    completion_handler(completion_handler&&) = default;
+    completion_handler& operator=(completion_handler&&) = default;
 
     using cancellation_slot_type = boost::asio::cancellation_slot;
 
     boost::asio::cancellation_slot get_cancellation_slot() const noexcept
     {
-        return frame_.get_cancellation_slot();
+        return context_.get_cancellation_slot();
     }
 
     using allocator_type = cached_tls_allocator<>;
@@ -50,50 +48,75 @@ struct completion_handler {
         return {};
     }
 
+    boost::asio::any_io_executor const& executor() const noexcept
+    {
+        return context_.get_executor();
+    }
+
     template<class... Args>
     void operator()(Args&&... args)
     {
-        awaitable_.set_value(std::forward<Args>(args)...);
+        context_.set_value(std::forward<Args>(args)...);
 
-        if (restore_shared_this_) {
-            frame_.shared_this = weak_this_.lock();
-            if (!frame_.shared_this)
-                return;
+        if (auto h = resume())
+            h.resume();
+    }
+
+private:
+    [[nodiscard]] std::coroutine_handle<> resume() noexcept
+    {
+        auto h = handle_.release();
+
+        // in case of eager completion, the awaitable will resume the coroutine
+        if (!context_.resume_completed())
+            return nullptr;
+
+        // if we fail to restore the shared_this, the coroutine must be destroyed
+        if (restore_shared_this_ && !context_.restore_shared_this(std::move(weak_this_))) {
+            h.destroy();
+            return nullptr;
         }
 
-        handle_.resume();
+        return h;
     }
+
+private:
+    resume_context<Awaitable>& context_;
+    unique_handle<> handle_;
+    weak_this_t weak_this_;
+    bool restore_shared_this_;
+
 };
 
 } // webasio::coro::detail
 
 namespace boost::asio {
 
-template<class Frame, class Awaitable, class Candidate>
-struct associated_executor<::webasio::coro::detail::completion_handler<Frame, Awaitable>, Candidate> {
+template<class Awaitable, class Candidate>
+struct associated_executor<webasio::coro::detail::completion_handler<Awaitable>, Candidate> {
     using type = any_io_executor;
 
-    static type get(const ::webasio::coro::detail::completion_handler<Frame, Awaitable>& handler,
-                    const Candidate& candidate = Candidate()) noexcept
+    static type get(webasio::coro::detail::completion_handler<Awaitable> const& handler,
+                    Candidate const& candidate = Candidate()) noexcept
     {
-        if (auto const& executor = handler.frame_.get_executor())
+        if (auto const& executor = handler.executor())
             return executor;
 
         return any_io_executor { std::nothrow, candidate };
     }
 };
 
-template<class Frame, class Awaitable, class Candidate>
-struct associated_immediate_executor<::webasio::coro::detail::completion_handler<Frame, Awaitable>, Candidate> {
-    using type = any_io_executor;
+template<class Awaitable, class Candidate>
+struct associated_immediate_executor<webasio::coro::detail::completion_handler<Awaitable>, Candidate> {
+    using type = inline_or_executor<Candidate>;
 
-    static type get(const ::webasio::coro::detail::completion_handler<Frame, Awaitable>& handler,
-                    const Candidate& candidate = Candidate()) noexcept
+    static type get(webasio::coro::detail::completion_handler<Awaitable> const& handler,
+                    Candidate const& candidate = Candidate()) noexcept
     {
-        if (auto const& executor = handler.frame_.get_executor())
-            return executor;
+        if (auto const& executor = handler.executor())
+            return type { executor };
 
-        return any_io_executor { std::nothrow, candidate };
+        return type { candidate };
     }
 };
 

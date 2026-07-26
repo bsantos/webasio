@@ -26,6 +26,7 @@ coro::main co_main(std::span<std::string_view> args)
 	main_log.info("end test()");
 	main_log.info("do_nothing(): ", co_await do_nothing());
 	say_hello(co_await this_coro::executor);
+	co_await test_sleep();
 	co_await sleep();
 	co_await wait_for_signal();
 	main_log.info("done! will wait at most 5s for pending operations");

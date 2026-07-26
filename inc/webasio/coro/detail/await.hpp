@@ -29,7 +29,7 @@ struct init_await {
 
         std::coroutine_handle<> await_suspend(std::coroutine_handle<> caller) noexcept
         {
-            callee_.promise().on_initial_resume(caller);
+            callee_.promise().caller.reset(caller);
             return callee_;
         }
 

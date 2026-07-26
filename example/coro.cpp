@@ -10,6 +10,8 @@
 #include <webasio/logger.hpp>
 
 #include <boost/asio/signal_set.hpp>
+#include <boost/asio/steady_timer.hpp>
+
 
 namespace webasio {
 
@@ -35,6 +37,21 @@ co_promise<void> sleep()
 	example_log.info("sleeping again");
     co_await this_coro::sleep_for(std::chrono::seconds(1));
     example_log.info("sleeping completed");
+}
+
+co_detached do_sleep(boost::asio::any_io_executor ex, std::chrono::seconds d)
+{
+	boost::asio::steady_timer timer { ex, d };
+
+	example_log.info("sleeping for ", d);
+	co_await timer.async_wait();
+	example_log.info("wakeup after ", d);
+}
+
+co_promise<void> test_sleep()
+{
+	for (size_t i = 0; i < 1000; ++i)
+		do_sleep(co_await this_coro::executor, std::chrono::seconds(i & 0x3));
 }
 
 co_promise<void> wait_for_signal()

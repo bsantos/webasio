@@ -10,7 +10,7 @@
 #include <webasio/assert.hpp>
 #include <webasio/coro/detail/deferred_awaitable.hpp>
 #include <webasio/coro/detail/getter_awaitable.hpp>
-#include <webasio/coro/detail/resume_handler.hpp>
+#include <webasio/coro/detail/dispatch_handler.hpp>
 #include <webasio/coro/detail/timer_awaitable.hpp>
 #include <webasio/coro/this_coro.hpp>
 #include <webasio/memory_cache.hpp>
@@ -116,36 +116,25 @@ struct promise_frame : promise_frame_base<Ts...> {
         return slot.is_connected() ? slot : cancellation_slot;
     }
 
-    template<class OtherPromise>
-    void on_initial_resume(std::coroutine_handle<OtherPromise> h)
-    {
-        if constexpr (requires (OtherPromise& p) { { p.get_executor() } -> std::same_as<boost::asio::any_io_executor const&>; })
-            caller_executor = std::addressof(h.promise().get_executor());
+    struct final_awaitable : std::suspend_always, resume_context<final_awaitable> {
+        using context = resume_context<final_awaitable>;
 
-        if constexpr (requires (OtherPromise& p) { { p.get_cancellation_slot() } -> std::convertible_to<boost::asio::cancellation_slot>; })
-            cancellation_slot = h.promise().get_cancellation_slot();
-
-        caller.reset(h);
-    }
-
-    std::coroutine_handle<> on_final_resume()
-    {
-        if (caller_executor != std::addressof(executor) && *caller_executor) {
-            boost::asio::dispatch(*caller_executor, detail::resume_handler { std::move(caller) });
-            return std::noop_coroutine();
-        }
-        else if (inner_executor) {
-            boost::asio::dispatch(inner_executor, detail::resume_handler { std::move(caller) });
-            return std::noop_coroutine();
-        }
-
-        return caller.release();
-    }
-
-    struct final_awaitable : std::suspend_always {
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_frame> h) const noexcept
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_frame> callee) noexcept
         {
-            return h.promise().on_final_resume();
+            promise_frame& callee_frame = callee.promise();
+            std::coroutine_handle<> caller = callee_frame.caller.release();
+
+            if (callee_frame.caller_executor != std::addressof(callee_frame.executor) && *callee_frame.caller_executor)
+                boost::asio::dispatch(*callee_frame.caller_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
+            else if (callee_frame.inner_executor)
+                boost::asio::dispatch(callee_frame.inner_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
+            else
+                return caller;
+
+            if (this->resume_awaiting(caller))
+                return caller;
+
+            return std::noop_coroutine();
         }
     };
 
@@ -162,7 +151,14 @@ struct promise_frame : promise_frame_base<Ts...> {
         template<class Caller>
         std::coroutine_handle<> await_suspend(std::coroutine_handle<Caller> caller) noexcept
         {
-            callee_.promise().on_initial_resume(caller);
+            callee_.promise().caller.reset(caller);
+
+            if constexpr (requires (Caller& p) { { p.get_executor() } -> std::same_as<boost::asio::any_io_executor const&>; })
+                callee_.promise().caller_executor = std::addressof(caller.promise().get_executor());
+
+            if constexpr (requires (Caller& p) { { p.get_cancellation_slot() } -> std::convertible_to<boost::asio::cancellation_slot>; })
+                callee_.promise().cancellation_slot = caller.promise().get_cancellation_slot();
+
             return callee_;
         }
 
@@ -180,9 +176,9 @@ struct promise_frame : promise_frame_base<Ts...> {
     }
 
     template<class... Args, class Initiation, class... InitArgs>
-    auto await_transform(boost::asio::deferred_async_operation<void(Args...), Initiation, InitArgs...> op) const noexcept
+    auto await_transform(boost::asio::deferred_async_operation<void(Args...), Initiation, InitArgs...> op) noexcept
     {
-        return detail::deferred_awaitable<void(Args...), Initiation, InitArgs...> { std::move(op) };
+        return detail::deferred_awaitable<promise_frame, void(Args...), Initiation, InitArgs...> { *this, std::move(op) };
     }
 
     auto await_transform(this_coro::post_t arg) noexcept
@@ -190,29 +186,44 @@ struct promise_frame : promise_frame_base<Ts...> {
         struct awaitable : std::suspend_always {
             boost::asio::any_io_executor const& executor_;
 
+            awaitable(boost::asio::any_io_executor const& ex)
+                : executor_ { ex }
+            {}
+
             void await_suspend(std::coroutine_handle<> h) const noexcept
             {
-                boost::asio::post(executor_, detail::resume_handler { h });
+                boost::asio::post(executor_, detail::dispatch_handler<> { h });
             }
         };
 
         set_executor(std::move(arg.executor));
-        return awaitable { {}, get_executor() };
+        return awaitable { get_executor() };
     }
 
     auto await_transform(this_coro::dispatch_t arg) noexcept
     {
-        struct awaitable : std::suspend_always {
+        struct awaitable : std::suspend_always, detail::resume_context<awaitable> {
+            using context = detail::resume_context<awaitable>;
+
             boost::asio::any_io_executor const& executor_;
 
-            void await_suspend(std::coroutine_handle<> h) const noexcept
+            awaitable(boost::asio::any_io_executor const& ex)
+                : executor_ { ex }
+            {}
+
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept
             {
-                boost::asio::dispatch(executor_, detail::resume_handler { h });
+                boost::asio::dispatch(executor_, detail::dispatch_handler<awaitable> { *this, h });
+
+                if (this->resume_awaiting(h))
+                    return h;
+
+                return std::noop_coroutine();
             }
         };
 
         set_executor(std::move(arg.executor));
-        return awaitable { {}, get_executor() };
+        return awaitable { get_executor() };
     }
 
     auto await_transform(this_coro::executor_t) noexcept
@@ -286,7 +297,7 @@ struct promise_frame : promise_frame_base<Ts...> {
         if (!cached_steady_timer)
             cached_steady_timer = std::make_unique<boost::asio::steady_timer>(get_executor());
 
-        return detail::basic_timer_awaitable<boost::asio::steady_timer&> { *cached_steady_timer, sleep.duration };
+        return detail::basic_timer_awaitable<promise_frame, boost::asio::steady_timer&> { *this, *cached_steady_timer, sleep.duration };
     }
 
     template<class Rep, class Period>
@@ -295,13 +306,13 @@ struct promise_frame : promise_frame_base<Ts...> {
         if (!cached_steady_timer)
             cached_steady_timer = std::make_unique<boost::asio::steady_timer>(get_executor());
 
-        return detail::basic_timer_awaitable<boost::asio::steady_timer&> { *cached_steady_timer, sleep.expiry_time };
+        return detail::basic_timer_awaitable<promise_frame, boost::asio::steady_timer&> { *this, *cached_steady_timer, sleep.expiry_time };
     }
 
     template<class Clock, class Rep, class Period>
     auto await_transform(this_coro::sleep_t<std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>> sleep)
     {
-        return detail::timer_awaitable<Clock> { get_executor(), sleep.expiry_time };
+        return detail::timer_awaitable<promise_frame, Clock> { *this, sleep.expiry_time };
     }
 };
 

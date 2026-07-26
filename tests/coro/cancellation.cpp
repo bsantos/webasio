@@ -26,7 +26,8 @@ struct coro_test {
 
     webasio::co_promise<bool> foo(std::chrono::seconds duration)
     {
-        co_return co_await webasio::this_coro::sleep_for(duration) == std::chrono::steady_clock::time_point::min();
+        auto [ec, _] = co_await webasio::coro::sleep_for(duration);
+        co_return ec == boost::asio::error::operation_aborted;
     }
 
     webasio::co_promise<bool> bar()
