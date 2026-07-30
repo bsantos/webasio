@@ -7,19 +7,15 @@
 
 #pragma once
 
-#include <webasio/coro/detail/promise_frame.hpp>
+#include <webasio/coro/detail/detached_frame.hpp>
 
 namespace webasio::coro {
 
 struct detached {
-    struct promise_type : detail::promise_frame<detail::promise_no_base_tag> {
-        detached get_return_object() const noexcept { return {}; }
-        std::suspend_never initial_suspend() const noexcept { return {}; }
-        std::suspend_never final_suspend() const noexcept { return {}; }
-        void unhandled_exception() const { throw; }
-        void return_void() const noexcept {}
-    };
+    using promise_type = detail::promise_frame<detached>;
 };
+
+inline detached detail::promise_frame<detached>::get_return_object() const noexcept { return {}; }
 
 } // namespace webasio::coro
 

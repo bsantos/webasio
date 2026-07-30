@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <webasio/coro/basic_eager.hpp>
+#include <webasio/coro/detail/basic_detached.hpp>
 #include <webasio/coro/promise.hpp>
 
 
@@ -41,13 +41,13 @@ struct init_await {
     };
 
     template<class Handler, class Frame>
-    static basic_eager start_coro(Handler&& handler, unique_handle<Frame> coro)
+    static basic_detached start_coro(Handler&& handler, unique_handle<Frame> coro)
     {
         co_await awaitable<Handler, Frame> { std::forward<Handler>(handler), coro.release() };
     }
 
     template<class Handler, class Callable>
-    static basic_eager start_coro(Handler&& handler, Callable coro)
+    static basic_detached start_coro(Handler&& handler, Callable coro)
     {
         using frame_t = typename std::invoke_result_t<Callable>::promise_type;
 

@@ -12,18 +12,18 @@
 #include <coroutine>
 
 
-namespace webasio::coro {
+namespace webasio::coro::detail {
 
-struct basic_eager {
+struct basic_detached {
     struct promise_type {
         void* operator new(std::size_t size) { return memory_cache::tls::alloc(size); }
         void operator delete(void* ptr, std::size_t size) { memory_cache::tls::free(ptr, size); }
-        basic_eager get_return_object() const noexcept { return {}; }
+        basic_detached get_return_object() const noexcept { return {}; }
         std::suspend_never initial_suspend() const noexcept { return {}; }
         std::suspend_never final_suspend() const noexcept { return {}; }
-        void unhandled_exception() const { throw; }
+        void unhandled_exception() const noexcept { std::rethrow_exception(std::current_exception()); }
         void return_void() const noexcept {}
     };
 };
 
-} // namespace webasio::coro
+} // namespace webasio::coro::detail

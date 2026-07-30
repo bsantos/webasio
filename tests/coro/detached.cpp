@@ -3,9 +3,28 @@
 #include <webasio/coro/detached.hpp>
 #include <webasio/coro/promise.hpp>
 
+#include <cstdlib>
 #include <memory>
+#include <sstream>
+#include <string_view>
 
 namespace {
+bool terminate_probe_enabled()
+{
+    auto* var = std::getenv("WEBASIO_TERMINATE_PROBE");
+    return var && std::string_view { var } == "1";
+}
+
+int run_terminate_probe(char const* test_case)
+{
+    auto const& mts = boost::unit_test::framework::master_test_suite();
+    std::ostringstream cmd;
+
+    cmd << "WEBASIO_TERMINATE_PROBE=1 \"" << mts.argv[0] << "\" --run_test=" << test_case
+        << " --report_level=no > /dev/null 2>&1";
+    return std::system(cmd.str().c_str());
+}
+
 struct coro_test {
     bool completed = false;
 
@@ -37,11 +56,16 @@ BOOST_AUTO_TEST_CASE(test_detached)
     BOOST_TEST(c.completed);
 }
 
-BOOST_AUTO_TEST_CASE(test_exception)
+BOOST_AUTO_TEST_CASE(test_exception_terminates)
 {
-    coro_test c;
+    if (terminate_probe_enabled()) {
+        coro_test c;
+        c.throw_exception();
+        BOOST_FAIL("detached exception probe unexpectedly returned");
+    }
 
-    BOOST_CHECK_THROW(c.throw_exception(), std::runtime_error);
+    auto const rc = run_terminate_probe("coro_detached/test_exception_terminates");
+    BOOST_TEST(rc != 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
