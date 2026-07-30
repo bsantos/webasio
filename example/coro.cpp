@@ -12,6 +12,7 @@
 #include <webasio/coro/executor.hpp>
 #include <webasio/coro/sleep.hpp>
 
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/steady_timer.hpp>
 
@@ -61,7 +62,7 @@ co_promise<void> wait_for_signal()
 {
 	boost::asio::signal_set sig { co_await coro::executor, SIGINT, SIGTERM };
 	example_log.info("waiting for signal");
-	auto [ec, sig_num] = co_await sig.async_wait();
+	auto [ec, sig_num] = co_await sig.async_wait(boost::asio::as_tuple);
 	if (sig_num == SIGTERM)
 		example_log.info("exiting because of terminate signal");
 	else if (sig_num == SIGINT)

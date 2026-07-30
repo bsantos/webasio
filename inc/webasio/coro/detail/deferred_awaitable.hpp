@@ -15,6 +15,29 @@
 
 namespace webasio::coro::detail {
 
+template<class... Ts>
+struct asio_outcome {
+    using type = outcome<Ts...>;
+};
+
+template<class... Ts>
+struct asio_outcome<std::error_code, Ts...> {
+    using type = outcome<Ts...>;
+};
+
+template<class... Ts>
+struct asio_outcome<boost::system::error_code, Ts...> {
+    using type = outcome<Ts...>;
+};
+
+template<class... Ts>
+struct asio_outcome<std::exception_ptr, Ts...> {
+    using type = outcome<Ts...>;
+};
+
+template<class... Ts>
+using asio_outcome_t = typename asio_outcome<Ts...>::type;
+
 template<class Frame, class Signature, class Initiation, class... InitArgs>
 class deferred_awaitable;
 
@@ -29,11 +52,33 @@ public:
         , op_ { std::forward<Operation>(op) }
     {}
 
-    template<class... CArgs>
-    void set_value(CArgs&&... args)
+    template<class CArg, class... CArgs>
+    void set_value(CArg&& arg, CArgs&&... args)
     {
-        result_.set_value(std::forward<CArgs>(args)...);
+        if constexpr (std::same_as<std::remove_cvref_t<CArg>, std::error_code>) {
+            if (arg)
+                result_.set_exception(std::system_error(std::forward<CArg>(arg)));
+            else
+                result_.set_value(std::forward<CArgs>(args)...);
+        }
+        else if constexpr (std::same_as<std::remove_cvref_t<CArg>, boost::system::error_code>) {
+            if (arg)
+                result_.set_exception(std::system_error(std::forward<CArg>(arg)));
+            else
+                result_.set_value(std::forward<CArgs>(args)...);
+        }
+        else if constexpr (std::same_as<std::remove_cvref_t<CArg>, std::exception_ptr>) {
+            if (arg)
+                result_.set_exception(arg);
+            else
+                result_.set_value(std::forward<CArgs>(args)...);
+        }
+        else
+            result_.set_value(std::forward<CArg>(arg), std::forward<CArgs>(args)...);
     }
+
+    void set_value()
+    {}
 
     Frame& frame() { return frame_; }
     Frame const& frame() const { return frame_; }
@@ -67,7 +112,7 @@ public:
 
 private:
     Frame& frame_;
-    outcome<Args...> result_;
+    asio_outcome_t<Args...> result_;
     boost::asio::deferred_async_operation<void(Args...), Initiation, InitArgs...> op_;
 };
 

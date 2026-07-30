@@ -9,6 +9,7 @@
 #include <webasio/scoped_final.hpp>
 #include <webasio/logger.hpp>
 
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/cancel_after.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
@@ -37,7 +38,7 @@ struct coro_test {
         boost::asio::ip::udp::socket socket { ioc, boost::asio::ip::udp::v4() };
         char buffer[256];
 
-        auto [ec, _] = co_await socket.async_receive(boost::asio::buffer(buffer));
+        auto [ec, _] = co_await socket.async_receive(boost::asio::buffer(buffer), boost::asio::as_tuple);
         co_return ec == boost::asio::error::operation_aborted;
     }
 
@@ -66,7 +67,7 @@ struct coro_test {
         boost::asio::ip::udp::socket socket { ioc, boost::asio::ip::udp::v4() };
         char buffer[256];
 
-        auto [ec, _] = co_await socket.async_receive(boost::asio::buffer(buffer), boost::asio::cancel_after(std::chrono::seconds(1)));
+        auto [ec, _] = co_await socket.async_receive(boost::asio::buffer(buffer), boost::asio::cancel_after(std::chrono::seconds(1), boost::asio::as_tuple));
         aborted = ec == boost::asio::error::operation_aborted;
         cancelled = co_await webasio::coro::cancelled;
         completed = true;
