@@ -25,9 +25,23 @@ class promise;
 
 namespace detail {
 
+/**
+ * @brief Customization point mapping an awaited value to an awaitable.
+ * @internal
+ * @details Specialized by feature headers (sleep, dispatch, post, executor,
+ * cancellation) to give meaning to `co_await <tag>` inside a coroutine. Each
+ * specialization provides a static `get(frame, value)` returning the concrete
+ * awaitable, invoked from @ref promise_frame::await_transform.
+ */
 template<class T>
 struct promise_awaitable;
 
+/**
+ * @brief Result-carrying base of @ref promise_frame for value coroutines.
+ * @internal
+ * @details Provides `return_value`/`unhandled_exception` that store the
+ * produced value or captured exception into an @ref outcome.
+ */
 template<class... Ts>
 struct promise_frame_base {
     using value_type = typename outcome<Ts...>::value_type;
@@ -39,6 +53,7 @@ struct promise_frame_base {
     void unhandled_exception() noexcept { result.set_exception(std::current_exception()); }
 };
 
+/// @internal Base specialization for `void`-returning coroutines.
 template<>
 struct promise_frame_base<void> {
     outcome<void> result;
@@ -47,12 +62,14 @@ struct promise_frame_base<void> {
     void return_void() { result.set_value(); }
 };
 
+/// @internal Tag selecting a promise base that carries no result at all.
 struct promise_no_base_tag {};
 
 template<>
 struct promise_frame_base<promise_no_base_tag> {
 };
 
+/// @internal Returns `shared_from_this()` if @p this_ supports it, else null.
 template<class T>
 inline std::shared_ptr<void const> get_shared_this(T&& this_)
 {
@@ -62,6 +79,25 @@ inline std::shared_ptr<void const> get_shared_this(T&& this_)
         return nullptr;
 }
 
+/**
+ * @brief The coroutine promise driving @ref webasio::coro::promise.
+ * @internal
+ * @details
+ * Holds the coroutine's full runtime state: the pending result, the caller
+ * handle to resume on completion, an optional strong self-reference
+ * (`shared_this`) to keep an owning object alive across suspension, the
+ * cancellation slot/state, and the associated executor chain used for
+ * executor hopping (`executor`, `inner_executor`, `caller_executor`).
+ *
+ * Frames are allocated from the thread-local @ref webasio::memory_cache.
+ * `await_transform` routes awaited values through @ref promise_awaitable,
+ * handles nested `promise` awaiting (propagating executor and cancellation
+ * slot to the callee), and adapts raw Asio deferred operations. On final
+ * suspension the caller is resumed on its own executor, hopping threads when
+ * necessary.
+ *
+ * @tparam Ts The coroutine's produced value types (or a base tag).
+ */
 template<class... Ts>
 struct promise_frame : promise_frame_base<Ts...> {
     unique_handle<>                            caller;
@@ -123,6 +159,8 @@ struct promise_frame : promise_frame_base<Ts...> {
         return slot.is_connected() ? slot : cancellation_slot;
     }
 
+    /// @internal Resumes the caller on final suspension, hopping to its
+    /// executor when it differs from the callee's.
     struct final_awaitable : std::suspend_always, resume_context<final_awaitable> {
         using context = resume_context<final_awaitable>;
 
@@ -149,6 +187,8 @@ struct promise_frame : promise_frame_base<Ts...> {
     std::suspend_always initial_suspend() const noexcept { return {}; }
     final_awaitable final_suspend() const noexcept  { return {}; }
 
+    /// @internal Awaitable for a nested `co_await promise<Us...>`, wiring the
+    /// callee's caller/executor/cancellation-slot to this frame.
     template<class... Us>
     struct coro_awaitable {
         std::coroutine_handle<promise_frame<Us...>> callee_;
@@ -176,18 +216,22 @@ struct promise_frame : promise_frame_base<Ts...> {
         }
     };
 
+    /// @internal Transforms `co_await promise<Us...>` into @ref coro_awaitable.
     template<class... Us>
     auto await_transform(promise<Us...> coro) noexcept
     {
         return coro_awaitable<Us...> { coro.m_coro.release() };
     }
 
+    /// @internal Transforms a raw Asio deferred operation into a
+    /// @ref deferred_awaitable so it can be awaited directly.
     template<class... Args, class Initiation, class... InitArgs>
     auto await_transform(boost::asio::deferred_async_operation<void(Args...), Initiation, InitArgs...> op) noexcept
     {
         return detail::deferred_awaitable<promise_frame, void(Args...), Initiation, InitArgs...> { *this, std::move(op) };
     }
 
+    /// @internal Transforms any other awaited value via @ref promise_awaitable.
     template<class T>
     auto await_transform(T&& value) -> decltype(promise_awaitable<std::decay_t<T>>::get(*this, std::forward<T>(value)))
     {

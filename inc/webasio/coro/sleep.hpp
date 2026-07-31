@@ -13,6 +13,7 @@
 
 namespace webasio::coro {
 
+/// Tag carrying a sleep duration or expiry time point. @internal
 template<class... Options>
 struct sleep_t;
 
@@ -26,12 +27,39 @@ struct sleep_t<std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>
     std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>> expiry_time;
 };
 
+/**
+ * @brief Suspends the coroutine for a relative @p duration.
+ *
+ * @details `co_await sleep_for(d)` waits `d` on a steady timer bound to the
+ * coroutine's executor, then resumes. The wait is cancellable: if the
+ * coroutine's cancellation state is triggered the timer is cancelled and the
+ * coroutine resumes early (observe via `co_await cancelled`).
+ *
+ * @tparam Rep,Period `std::chrono::duration` template parameters.
+ * @param duration How long to wait.
+ * @return An awaitable tag consumed by the coroutine machinery.
+ *
+ * @see webasio::coro::sleep_until
+ */
 template<class Rep, class Period>
 constexpr auto sleep_for(std::chrono::duration<Rep, Period> duration)
 {
     return sleep_t<std::chrono::duration<Rep, Period>> { duration };
 }
 
+/**
+ * @brief Suspends the coroutine until an absolute @p expiry_time.
+ *
+ * @details `co_await sleep_until(tp)` waits until the clock reaches @p tp,
+ * using a steady timer for `steady_clock` time points and a generic waitable
+ * timer otherwise. The wait is cancellable like @ref sleep_for.
+ *
+ * @tparam Clock,Rep,Period `std::chrono::time_point` template parameters.
+ * @param expiry_time The time point to wake up at.
+ * @return An awaitable tag consumed by the coroutine machinery.
+ *
+ * @see webasio::coro::sleep_for
+ */
 template<class Clock, class Rep, class Period>
 constexpr auto sleep_until(std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>> expiry_time)
 {

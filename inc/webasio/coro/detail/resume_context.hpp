@@ -17,9 +17,24 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Race-free coordinator between an awaitable and its completion handler.
+ * @internal
+ * @details
+ * A suspended awaitable and the async operation's completion handler may run
+ * concurrently: the operation can complete before the awaiting coroutine has
+ * finished suspending (eager completion), or the handler may be destroyed
+ * without completing. `resume_context` uses a single atomic state machine so
+ * exactly one side takes responsibility for resuming (or destroying) the
+ * coroutine, and exposes the frame's executor/cancellation slot to the
+ * handler through CRTP.
+ *
+ * @tparam Awaitable The CRTP-derived awaitable providing `frame()`/`set_value`.
+ */
 template<class Awaitable>
 class resume_context {
 public:
+    /// Lifecycle states of the pending async operation.
     enum class state {
         initializing, /// awaitable is initializing the async operation
         awaiting,     /// awaitable is waiting for the async operation completion

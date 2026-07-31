@@ -17,6 +17,13 @@ struct detached;
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Promise type for @ref webasio::coro::detached coroutines.
+ * @internal
+ * @details Eager (never suspends at initial/final suspend) and result-less.
+ * `unhandled_exception` is `noexcept` and rethrows, so an escaping exception
+ * calls `std::terminate`; a detached coroutine must handle its own errors.
+ */
 template<>
 struct promise_frame<detached> : detail::promise_frame<detail::promise_no_base_tag> {
     detached get_return_object() const noexcept;

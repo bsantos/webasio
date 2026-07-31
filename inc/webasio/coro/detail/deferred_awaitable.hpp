@@ -15,6 +15,13 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Strips a leading error argument from an Asio completion signature.
+ * @internal
+ * @details Given the completion arguments, drops a leading `std::error_code`,
+ * `boost::system::error_code` or `std::exception_ptr` (which are surfaced as
+ * exceptions) and yields the @ref outcome for the remaining value(s).
+ */
 template<class... Ts>
 struct asio_outcome {
     using type = outcome<Ts...>;
@@ -38,6 +45,19 @@ struct asio_outcome<std::exception_ptr, Ts...> {
 template<class... Ts>
 using asio_outcome_t = typename asio_outcome<Ts...>::type;
 
+/**
+ * @brief Awaitable adapting a raw Asio deferred operation to `co_await`.
+ * @internal
+ * @details Enables `co_await`ing a Boost.Asio async operation directly inside
+ * a coroutine. A leading `error_code`/`exception_ptr` completion argument is
+ * converted into a thrown exception (`std::system_error` for error codes);
+ * the remaining arguments become the awaited value. Completion is coordinated
+ * through @ref completion_handler / @ref resume_context to handle eager
+ * completion and cancellation.
+ *
+ * @note Because errors are thrown, inspect them with try/catch rather than
+ * destructuring a returned tuple.
+ */
 template<class Frame, class Signature, class Initiation, class... InitArgs>
 class deferred_awaitable;
 

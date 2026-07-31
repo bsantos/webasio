@@ -13,6 +13,14 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Initiation object bridging a @ref promise into an Asio operation.
+ * @internal
+ * @details Used by @ref webasio::coro::await. It starts the given coroutine
+ * inside a lightweight @ref basic_detached trampoline and, on completion,
+ * forwards the coroutine's @ref outcome to the Asio completion handler.
+ * Accepts either a ready coroutine handle or a nullary factory producing one.
+ */
 struct init_await {
     template<class... Ts>
     static auto get_handle(promise<Ts...>&& coro)
@@ -20,6 +28,8 @@ struct init_await {
         return std::move(coro.m_coro);
     }
 
+    /// @internal Awaitable that runs @p callee_ then invokes @p handler_ with
+    /// its outcome.
     template<class Handler, class Frame>
     struct awaitable {
         std::decay_t<Handler> handler_;

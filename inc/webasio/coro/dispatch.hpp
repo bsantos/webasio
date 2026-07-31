@@ -17,11 +17,29 @@
 
 namespace webasio::coro {
 
+/// Tag holding the target executor for a @ref dispatch request. @internal
 template<class Executor>
 struct dispatch_t {
     std::decay_t<Executor> executor;
 };
 
+/**
+ * @brief Rebinds the coroutine to @p executor, resuming inline when possible.
+ *
+ * @details
+ * `co_await dispatch(ex)` sets the coroutine's associated executor to @p ex
+ * and continues execution there. It uses `boost::asio::dispatch` semantics:
+ * if the current thread already belongs to @p ex the coroutine resumes
+ * immediately without re-queuing; otherwise the continuation is posted to
+ * @p ex. Subsequent cancellable operations then run on @p ex.
+ *
+ * @tparam Executor The executor (or strand) type to switch to.
+ * @param executor The executor to associate with and resume on.
+ * @return An awaitable tag consumed by the coroutine machinery.
+ *
+ * @see webasio::coro::post
+ * @see webasio::coro::executor
+ */
 template<class Executor>
 inline dispatch_t<Executor> dispatch(Executor&& executor) noexcept
 {
@@ -30,6 +48,7 @@ inline dispatch_t<Executor> dispatch(Executor&& executor) noexcept
 
 namespace detail {
 
+/// Awaitable that hops the coroutine onto its executor via `asio::dispatch`. @internal
 struct dispatch_awaitable : std::suspend_always, detail::resume_context<dispatch_awaitable> {
     boost::asio::any_io_executor const& executor_;
 
@@ -48,6 +67,7 @@ struct dispatch_awaitable : std::suspend_always, detail::resume_context<dispatch
     }
 };
 
+/// Maps `co_await dispatch(ex)` to @ref dispatch_awaitable. @internal
 template<class Executor>
 struct promise_awaitable<dispatch_t<Executor>> {
     template<class... Ts>

@@ -14,6 +14,19 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Cancellable awaitable wrapping a waitable timer.
+ * @internal
+ * @details Backs @ref webasio::coro::sleep_for / @ref webasio::coro::sleep_until.
+ * Owns or references a timer, arms it with the requested duration or expiry,
+ * and suspends the coroutine on `async_wait`, resuming when the timer fires or
+ * is cancelled. If the deadline has already passed, `await_ready` short-
+ * circuits without suspending. Resumes with `(error_code, expiry)`; a
+ * cancelled wait yields `operation_aborted`.
+ *
+ * @tparam Frame The coroutine promise frame type.
+ * @tparam Timer The (possibly reference) waitable timer type.
+ */
 template<class Frame, class Timer>
 class basic_timer_awaitable : resume_context<basic_timer_awaitable<Frame, Timer>> {
     using timer_type = std::remove_cvref_t<Timer>;
@@ -84,6 +97,7 @@ private:
     boost::system::error_code ec_;
 };
 
+/// @internal Convenience alias building a timer awaitable for a given clock.
 template<class Frame, class Clock>
 using timer_awaitable = basic_timer_awaitable<Frame, boost::asio::basic_waitable_timer<Clock>>;
 

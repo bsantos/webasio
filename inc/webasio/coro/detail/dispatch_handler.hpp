@@ -13,6 +13,18 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Handler that resumes a coroutine when run by an executor.
+ * @internal
+ * @details Posted or dispatched to an executor to resume (or, on the
+ * @ref resume_context path, safely destroy) a coroutine on the right thread.
+ * The @p Awaitable overload cooperates with @ref resume_context for the
+ * executor-hop-on-completion case; the `void` specialization is an
+ * unconditional resume used for plain post/dispatch hops. Allocates from the
+ * thread-local cache.
+ * @tparam Awaitable The awaitable to coordinate with, or `void` for a plain
+ * resume.
+ */
 template<class Awaitable = void>
 class dispatch_handler {
 public:
@@ -56,6 +68,7 @@ private:
     unique_handle<> handle_;
 };
 
+/// @internal Unconditional-resume specialization for plain executor hops.
 template<>
 class dispatch_handler<void> {
 public:

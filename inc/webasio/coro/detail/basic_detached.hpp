@@ -14,6 +14,23 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Minimal eager coroutine return type used to drive internal tasks.
+ *
+ * @details
+ * `basic_detached` is a lightweight building block, not a user-facing API. Its
+ * promise starts the coroutine immediately (`initial_suspend` and
+ * `final_suspend` both never suspend) and does not retain the coroutine
+ * frame, so the body must own its own lifetime. Frames are allocated from
+ * the thread-local @ref webasio::memory_cache to avoid per-task heap
+ * traffic. `unhandled_exception` is `noexcept` and rethrows, so an escaping
+ * exception calls `std::terminate`.
+ *
+ * It is used, for example, to kick off the trampoline coroutine that wires a
+ * @ref promise into an Asio completion handler.
+ *
+ * @internal
+ */
 struct basic_detached {
     struct promise_type {
         void* operator new(std::size_t size) { return memory_cache::tls::alloc(size); }

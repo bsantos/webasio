@@ -18,6 +18,21 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Asio completion handler that resumes a suspended coroutine.
+ * @internal
+ * @details
+ * Bound to an async operation initiated by an awaitable; on completion it
+ * stores the result into the awaitable and resumes the coroutine, coordinating
+ * with @ref resume_context to handle eager completion and cancellation races.
+ * It forwards the coroutine's associated executor and cancellation slot to
+ * Asio, allocates from the thread-local cache, and holds a weak reference to
+ * the owning object (`shared_this`) which it re-locks before resuming, so a
+ * concurrently destroyed owner aborts the coroutine safely. If the handler is
+ * destroyed without being invoked, the coroutine is destroyed.
+ *
+ * @tparam Awaitable The awaitable that initiated the operation.
+ */
 template<class Awaitable>
 class completion_handler {
     using shared_this_t = std::shared_ptr<void const>;

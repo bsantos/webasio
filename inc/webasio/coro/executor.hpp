@@ -13,12 +13,25 @@
 
 namespace webasio::coro {
 
+/// Tag type for the @ref executor awaitable. @internal
 struct executor_t { };
 
+/**
+ * @brief Awaitable that yields the coroutine's current associated executor.
+ *
+ * @details `co_await executor` returns a
+ * `boost::asio::any_io_executor const&` referring to the executor the
+ * coroutine is currently running on. Useful to schedule further work or to
+ * construct I/O objects bound to the same context.
+ *
+ * @see webasio::coro::dispatch
+ * @see webasio::coro::post
+ */
 inline constexpr executor_t executor;
 
 namespace detail {
 
+/// Maps `co_await executor` to a getter awaitable. @internal
 template<>
 struct promise_awaitable<executor_t> {
     template<class... Ts>

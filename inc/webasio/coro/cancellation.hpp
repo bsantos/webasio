@@ -18,8 +18,23 @@
 
 namespace webasio::coro {
 
+/// Re-export of `boost::asio::cancellation_type`.
 using cancellation_type = boost::asio::cancellation_type;
 
+/**
+ * @brief A cancellation signal that can emit from an arbitrary executor.
+ *
+ * @details
+ * Extends `boost::asio::cancellation_signal` with an executor-aware
+ * `emit(executor, type)` overload that marshals the emission onto the given
+ * executor via `boost::asio::dispatch`. This lets code running on one thread
+ * safely cancel work whose slot is serviced on another (for example the
+ * strand owning the coroutine). Emitted work is allocated from the
+ * thread-local cache.
+ *
+ * @see webasio::coro::multicast_cancellation
+ * @see webasio::coro::reset_cancellation_state
+ */
 class cancellation_signal : public boost::asio::cancellation_signal {
     using base = boost::asio::cancellation_signal;
 
@@ -41,11 +56,13 @@ class cancellation_signal : public boost::asio::cancellation_signal {
     };
 
 public:
+    /// Emits @p type synchronously to the connected slot.
     void emit(cancellation_type type = cancellation_type::terminal)
     {
         base::emit(type);
     }
 
+    /// Emits @p type by dispatching the emission onto @p ex.
     template<class Executor>
     void emit(Executor&& ex, cancellation_type type = cancellation_type::terminal)
     {
@@ -53,6 +70,19 @@ public:
     }
 };
 
+/**
+ * @brief Fan-out cancellation source driving many child signals at once.
+ *
+ * @details
+ * Maintains a shared registry of @ref signal instances. Emitting on the
+ * `multicast_cancellation` forwards the cancellation type to every currently
+ * registered child signal, allowing a single trigger to cancel a group of
+ * coroutines. Each child registers itself on construction and deregisters on
+ * destruction, so the group membership tracks child lifetimes automatically.
+ * An executor-aware `emit` overload is provided for cross-thread use.
+ *
+ * @see webasio::coro::multicast_cancellation_signal
+ */
 class multicast_cancellation {
     auto get()
     {
@@ -63,6 +93,11 @@ class multicast_cancellation {
     }
 
 public:
+    /**
+     * @brief A per-task child signal belonging to a @ref multicast_cancellation.
+     * @details Registers with the parent group on construction and removes
+     * itself on destruction. Cancel the whole group through the parent.
+     */
     class signal : public cancellation_signal {
     public:
         signal(multicast_cancellation& multicast)
@@ -103,6 +138,7 @@ private:
     };
 
 public:
+    /// Emits @p type synchronously to every registered child signal.
     void emit(cancellation_type type = cancellation_type::terminal)
     {
         if (!signals_)
@@ -112,6 +148,7 @@ public:
             sig->emit(type);
     }
 
+    /// Emits @p type to every child by dispatching the emission onto @p ex.
     template<class Executor>
     void emit(Executor&& ex, cancellation_type type = cancellation_type::terminal)
     {
@@ -122,19 +159,45 @@ private:
     std::shared_ptr<std::vector<signal*>> signals_;
 };
 
+/// A child signal of a @ref multicast_cancellation group.
 using multicast_cancellation_signal = multicast_cancellation::signal;
 
 
+/// Tag for the @ref cancelled awaitable. @internal
 struct cancelled_t {};
+/// Tag carrying a slot for @ref cancellation_slot / reset. @internal
 struct set_cancellation_slot_t { boost::asio::cancellation_slot slot; };
+/// Factory tag producing a @ref set_cancellation_slot_t from a slot. @internal
 struct cancellation_slot_t {
     constexpr set_cancellation_slot_t operator()(boost::asio::cancellation_slot slot) const noexcept { return { slot }; }
 };
 
+/**
+ * @brief Awaitable yielding the coroutine's current cancellation status.
+ * @details `co_await cancelled` returns the
+ * `boost::asio::cancellation_type` accumulated in the coroutine's
+ * cancellation state (`none` if not cancelled).
+ */
 inline constexpr cancelled_t cancelled;
+
+/**
+ * @brief Awaitable yielding or setting the coroutine's cancellation slot.
+ * @details `co_await cancellation_slot` yields the current slot;
+ * `co_await cancellation_slot(slot)` installs @p slot and resets state.
+ */
 inline constexpr cancellation_slot_t cancellation_slot;
 
 
+/**
+ * @brief Tag family describing a cancellation-state reset request.
+ *
+ * @details
+ * Specializations encode the optional combination of a new slot, an input
+ * filter and an output filter to install. Construct instances through the
+ * @ref reset_cancellation_state callable rather than directly.
+ *
+ * @tparam Options Encoded reset options (slot presence and filter types).
+ */
 template<class... Options>
 struct reset_cancellation_state_t;
 
@@ -170,36 +233,51 @@ struct reset_cancellation_state_t<set_cancellation_slot_t, InFilter, OutFilter> 
     OutFilter out_filter;
 };
 
+/**
+ * @brief Builder for @ref reset_cancellation_state_t reset requests.
+ *
+ * @details Each `operator()` overload produces an awaitable that, when
+ * `co_await`ed, (re)initializes the coroutine's cancellation state. Overloads
+ * accept an optional new slot plus an optional input filter and output
+ * filter. Establish cancellation state with this before awaiting cancellable
+ * work so that later `co_await cancelled` reflects the intended semantics.
+ */
 template<>
 struct reset_cancellation_state_t<> {
+    /// Resets state, keeping the current slot and clearing filters.
     constexpr auto operator()() const noexcept
     {
         return reset_cancellation_state_t<void> {};
     }
 
+    /// Resets state and installs a new @p slot.
     constexpr auto operator()(boost::asio::cancellation_slot slot) const noexcept
     {
         return reset_cancellation_state_t<set_cancellation_slot_t> { slot };
     }
 
+    /// Resets state with a single @p filter (used as both in and out filter).
     template<class Filter>
     constexpr auto operator()(Filter&& filter) const noexcept
     {
         return reset_cancellation_state_t<void, std::decay_t<Filter>> { std::forward<Filter>(filter) };
     }
 
+    /// Resets state with a new @p slot and a single @p filter.
     template<class Filter>
     constexpr auto operator()(boost::asio::cancellation_slot slot, Filter&& filter) const noexcept
     {
         return reset_cancellation_state_t<set_cancellation_slot_t, std::decay_t<Filter>> { slot, std::forward<Filter>(filter) };
     }
 
+    /// Resets state with distinct @p in_filter and @p out_filter.
     template<class InFilter, class OutFilter>
     constexpr auto operator()(InFilter&& in_filter, OutFilter&& out_filter) const noexcept
     {
         return reset_cancellation_state_t<void, std::decay_t<InFilter>, std::decay_t<OutFilter>> { std::forward<InFilter>(in_filter), std::forward<OutFilter>(out_filter) };
     }
 
+    /// Resets state with a new @p slot and distinct in/out filters.
     template<class InFilter, class OutFilter>
     constexpr auto operator()(boost::asio::cancellation_slot slot, InFilter&& in_filter, OutFilter&& out_filter) const noexcept
     {
@@ -207,10 +285,19 @@ struct reset_cancellation_state_t<> {
     }
 };
 
+/**
+ * @brief Establishes or replaces the coroutine's cancellation state.
+ * @details Await the result of one of its call operators, e.g.
+ * `co_await reset_cancellation_state(slot)`.
+ * @see webasio::coro::cancelled
+ * @see webasio::coro::cancellation_slot
+ */
 inline constexpr reset_cancellation_state_t<> reset_cancellation_state;
 
 namespace detail {
 
+// Maps the cancellation tag types above to their concrete awaitables and
+// applies the requested changes to the coroutine frame's cancellation state. @internal
 template<>
 struct promise_awaitable<cancelled_t> {
     template<class... Ts>

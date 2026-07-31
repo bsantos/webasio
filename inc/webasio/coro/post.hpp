@@ -17,11 +17,28 @@
 
 namespace webasio::coro {
 
+/// Tag holding the target executor for a @ref post request. @internal
 template<class Executor>
 struct post_t {
     std::decay_t<Executor> executor;
 };
 
+/**
+ * @brief Rebinds the coroutine to @p executor, always re-queuing the resume.
+ *
+ * @details
+ * `co_await post(ex)` sets the coroutine's associated executor to @p ex and
+ * resumes on it using `boost::asio::post` semantics: the continuation is
+ * always queued for later execution, never run inline, guaranteeing the
+ * current stack unwinds first. Use this (instead of @ref dispatch) when you
+ * need to avoid deep recursion or ensure fair scheduling.
+ *
+ * @tparam Executor The executor (or strand) type to switch to.
+ * @param executor The executor to associate with and resume on.
+ * @return An awaitable tag consumed by the coroutine machinery.
+ *
+ * @see webasio::coro::dispatch
+ */
 template<class Executor>
 inline post_t<Executor> post(Executor&& executor) noexcept
 {
@@ -30,6 +47,7 @@ inline post_t<Executor> post(Executor&& executor) noexcept
 
 namespace detail {
 
+/// Awaitable that hops the coroutine onto its executor via `asio::post`. @internal
 struct post_awaitable : std::suspend_always {
     boost::asio::any_io_executor const& executor_;
 
@@ -43,6 +61,7 @@ struct post_awaitable : std::suspend_always {
     }
 };
 
+/// Maps `co_await post(ex)` to @ref post_awaitable. @internal
 template<class Executor>
 struct promise_awaitable<post_t<Executor>> {
     template<class... Ts>

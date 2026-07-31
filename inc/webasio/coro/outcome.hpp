@@ -15,9 +15,29 @@
 
 namespace webasio::coro {
 
+/**
+ * @brief Move-only container holding either produced values or an exception.
+ *
+ * @details
+ * `outcome` is the result carrier delivered to callback-style completion
+ * handlers (see @ref webasio::coro::await). It stores exactly one of:
+ * nothing yet, a value (or tuple of values), or a captured
+ * `std::exception_ptr`. Calling `get()` yields the value, re-throwing the
+ * stored exception if one is present.
+ *
+ * The primary template forwards multi-value packs to the tuple
+ * specialization; dedicated specializations handle the `void`, empty and
+ * single-value cases.
+ *
+ * @tparam Args The value types carried on success.
+ */
 template<class... Args>
 class outcome;
 
+/**
+ * @brief `outcome` specialization for value-less coroutines.
+ * @details Carries only success/failure; `get()` re-throws on failure.
+ */
 template<>
 class outcome<void> {
 public:
@@ -42,12 +62,14 @@ public:
         assert_trap(!exception_, "outcome already set");
     }
 
+    /// Stores an exception by capturing @p ex into an `exception_ptr`.
     template<class E>
     void set_exception(E&& ex) noexcept
     {
         set_exception(std::make_exception_ptr(std::forward<E>(ex)));
     }
 
+    /// Stores an already-captured exception. @p ex must not be null.
     void set_exception(std::exception_ptr ex) noexcept
     {
         assert_trap(ex != nullptr, "exception cannot be null");
@@ -55,6 +77,7 @@ public:
         exception_ = ex;
     }
 
+    /// Re-throws the stored exception, if any; otherwise returns normally.
     void get()
     {
         if (exception_)
@@ -68,9 +91,16 @@ private:
     std::exception_ptr exception_;
 };
 
+/// `outcome` with an empty pack behaves like @ref outcome<void>.
 template<>
 class outcome<> : public outcome<void> {};
 
+/**
+ * @brief `outcome` specialization holding a single value of type @p T.
+ * @details Uses a discriminated union to store either the value or an
+ * exception without default-constructing @p T.
+ * @tparam T The carried value type (may be a reference).
+ */
 template<class T>
 class outcome<T> {
 public:
@@ -92,6 +122,7 @@ public:
         return *this;
     }
 
+    /// Constructs the stored value in place from @p args.
     template<class... Args>
     void set_value(Args&&... args) noexcept(noexcept(std::declval<storage_t>().emplace_value(std::forward<Args>(args)...)))
     {
@@ -99,12 +130,14 @@ public:
         storage_.emplace_value(std::forward<Args>(args)...);
     }
 
+    /// Stores an exception by capturing @p ex into an `exception_ptr`.
     template<class E>
     void set_exception(E&& ex) noexcept(noexcept(std::make_exception_ptr(std::forward<E>(ex))))
     {
         set_exception(std::make_exception_ptr(std::forward<E>(ex)));
     }
 
+    /// Stores an already-captured exception. @p ex must not be null.
     void set_exception(std::exception_ptr ex) noexcept
     {
         assert_trap(ex != nullptr, "exception cannot be null");
@@ -112,6 +145,11 @@ public:
         storage_.emplace_exception(std::move(ex));
     }
 
+    /**
+     * @brief Extracts the stored value, moving it out.
+     * @return The stored value.
+     * @throws The stored exception if the outcome holds an error.
+     */
     value_type get()
     {
         switch (storage_.which()) {
@@ -198,6 +236,7 @@ private:
     storage_t storage_;
 };
 
+/// Multi-value `outcome` storing the values as a `std::tuple`.
 template<class... Args>
 class outcome : public outcome<std::tuple<Args...>> {};
 

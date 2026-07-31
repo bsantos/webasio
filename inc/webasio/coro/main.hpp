@@ -24,6 +24,26 @@ namespace detail {
 extern "C" int main(int argc, const char* argv[]) noexcept;
 } // namespace detail
 
+/**
+ * @brief Coroutine return type for the program entry point `co_main`.
+ *
+ * @details
+ * Defining `webasio::co_main(std::span<std::string_view> args)` to return a
+ * `coro::main` turns the program entry point into a coroutine. The library's
+ * `detail::main` bootstrap creates a `boost::asio::io_context` sized to the
+ * hardware concurrency, keeps it alive with a work guard, resumes the
+ * coroutine on it, and runs the context on all threads until the coroutine
+ * completes.
+ *
+ * The coroutine ends by `co_return`ing either an `int` exit code or a
+ * `std::pair<int, std::chrono::steady_clock::duration>` where the second
+ * element is a grace period the run loop keeps servicing outstanding work
+ * after the context is stopped. Uncaught exceptions propagate out and
+ * terminate.
+ *
+ * @note This type is move-constructed only by the entry-point bootstrap and
+ * is not intended to be instantiated directly by user code.
+ */
 class main {
     struct promise_frame : detail::promise_frame<detail::promise_no_base_tag> {
         using executor_type = boost::asio::io_context::executor_type;
@@ -91,6 +111,12 @@ public:
 } // namespace webasio::coro
 
 namespace webasio {
+/**
+ * @brief User-defined program entry point run as a coroutine.
+ * @details Provide a definition of this function to implement your program.
+ * @param args The command-line arguments (argv) as string views.
+ * @return A @ref coro::main coroutine driving the application.
+ */
 coro::main co_main(std::span<std::string_view> args);
 } // namespace webasio
 

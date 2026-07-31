@@ -13,6 +13,14 @@
 
 namespace webasio::coro::detail {
 
+/**
+ * @brief Always-ready awaitable that yields a stored value on resume.
+ * @internal
+ * @details Used to expose synchronous coroutine-frame accessors (executor,
+ * cancellation slot/status) through the `co_await` syntax without suspending.
+ * @tparam T The type returned by `await_resume`.
+ * @tparam U The stored value type (defaults to @p T).
+ */
 template<class T, class U = T>
 struct getter_awaitable {
     U value;
