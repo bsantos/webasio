@@ -17,22 +17,13 @@
 
 namespace webasio::coro {
 
+template<class Executor>
 struct post_t {
-    boost::asio::any_io_executor executor;
-};
-
-struct scoped_post_t {
-    boost::asio::strand<boost::asio::any_io_executor> executor;
+    std::decay_t<Executor> executor;
 };
 
 template<class Executor>
-inline post_t post(Executor&& executor) noexcept
-{
-    return { std::forward<Executor>(executor) };
-}
-
-template<class Executor>
-inline scoped_post_t scoped_post(Executor&& executor) noexcept
+inline post_t<Executor> post(Executor&& executor) noexcept
 {
     return { std::forward<Executor>(executor) };
 }
@@ -52,26 +43,15 @@ struct post_awaitable : std::suspend_always {
     }
 };
 
-template<>
-struct promise_awaitable<post_t> {
+template<class Executor>
+struct promise_awaitable<post_t<Executor>> {
     template<class... Ts>
-    static auto get(promise_frame<Ts...>& frame, post_t arg)
+    static auto get(promise_frame<Ts...>& frame, post_t<Executor> arg)
     {
         frame.set_executor(std::move(arg.executor));
-        return post_awaitable { frame.get_executor() };
-    }
-};
-
-template<>
-struct promise_awaitable<scoped_post_t> {
-    template<class... Ts>
-    static auto get(promise_frame<Ts...>& frame, scoped_post_t arg)
-    {
-        frame.set_strand_executor(std::move(arg.executor));
-        return post_awaitable { frame.get_executor() };
+        return post_awaitable { frame.executor };
     }
 };
 
 } // namespace detail
-
 } // namespace webasio::coro

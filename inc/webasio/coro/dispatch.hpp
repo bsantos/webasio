@@ -17,22 +17,13 @@
 
 namespace webasio::coro {
 
+template<class Executor>
 struct dispatch_t {
-    boost::asio::any_io_executor executor;
-};
-
-struct scoped_dispatch_t {
-    boost::asio::strand<boost::asio::any_io_executor> executor;
+    std::decay_t<Executor> executor;
 };
 
 template<class Executor>
-inline dispatch_t dispatch(Executor&& executor) noexcept
-{
-    return { std::forward<Executor>(executor) };
-}
-
-template<class Executor>
-inline scoped_dispatch_t scoped_dispatch(Executor&& executor) noexcept
+inline dispatch_t<Executor> dispatch(Executor&& executor) noexcept
 {
     return { std::forward<Executor>(executor) };
 }
@@ -57,26 +48,15 @@ struct dispatch_awaitable : std::suspend_always, detail::resume_context<dispatch
     }
 };
 
-template<>
-struct promise_awaitable<dispatch_t> {
+template<class Executor>
+struct promise_awaitable<dispatch_t<Executor>> {
     template<class... Ts>
-    static auto get(promise_frame<Ts...>& frame, dispatch_t arg)
+    static auto get(promise_frame<Ts...>& frame, dispatch_t<Executor> arg)
     {
         frame.set_executor(std::move(arg.executor));
-        return dispatch_awaitable { frame.get_executor() };
-    }
-};
-
-template<>
-struct promise_awaitable<scoped_dispatch_t> {
-    template<class... Ts>
-    static auto get(promise_frame<Ts...>& frame, scoped_dispatch_t arg)
-    {
-        frame.set_strand_executor(std::move(arg.executor));
-        return dispatch_awaitable { frame.get_executor() };
+        return dispatch_awaitable { frame.executor };
     }
 };
 
 } // namespace detail
-
 } // namespace webasio::coro

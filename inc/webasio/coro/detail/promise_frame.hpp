@@ -66,12 +66,12 @@ template<class... Ts>
 struct promise_frame : promise_frame_base<Ts...> {
     unique_handle<>                            caller;
     std::shared_ptr<void const>                shared_this;
-    std::unique_ptr<boost::asio::steady_timer> cached_steady_timer;
-    boost::asio::any_io_executor               executor;
-    boost::asio::any_io_executor const*        caller_executor = std::addressof(executor);
-    boost::asio::any_io_executor               inner_executor;
+    std::unique_ptr<boost::asio::steady_timer> steady_timer;
     boost::asio::cancellation_slot             cancellation_slot;
     boost::asio::cancellation_state            cancellation_state;
+    boost::asio::any_io_executor const*        caller_executor = std::addressof(executor);
+    boost::asio::any_io_executor               executor;
+    boost::asio::any_io_executor               inner_executor;
 
     promise_frame() = default;
 
@@ -94,14 +94,22 @@ struct promise_frame : promise_frame_base<Ts...> {
     void set_executor(Executor&& ex)
     {
         executor = std::forward<Executor>(ex);
-        inner_executor = nullptr;
+
+        if (caller_executor == std::addressof(inner_executor)) {
+            caller_executor = std::addressof(executor);
+            inner_executor = nullptr;
+        }
     }
 
     template<class InnerExecutor>
-    void set_strand_executor(boost::asio::strand<InnerExecutor> const& ex)
+    void set_executor(boost::asio::strand<InnerExecutor>&& ex)
     {
-        executor = ex;
-        inner_executor = ex.get_inner_executor();
+        if (caller_executor == std::addressof(executor)) {
+            caller_executor = std::addressof(inner_executor);
+            inner_executor = ex.get_inner_executor();
+        }
+
+        executor = std::move(ex);
     }
 
     boost::asio::any_io_executor const& get_executor() const noexcept
@@ -123,17 +131,17 @@ struct promise_frame : promise_frame_base<Ts...> {
             promise_frame& callee_frame = callee.promise();
             std::coroutine_handle<> caller = callee_frame.caller.release();
 
-            if (callee_frame.caller_executor != std::addressof(callee_frame.executor) && *callee_frame.caller_executor)
+            // ensure the caller coroutine is resumed on it's executor
+            if (callee_frame.caller_executor != std::addressof(callee_frame.executor) && *callee_frame.caller_executor) {
                 boost::asio::dispatch(*callee_frame.caller_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
-            else if (callee_frame.inner_executor)
-                boost::asio::dispatch(callee_frame.inner_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
-            else
-                return caller;
 
-            if (this->resume_awaiting(caller))
-                return caller;
+                if (this->resume_awaiting(caller))
+                    return caller;
 
-            return std::noop_coroutine();
+                return std::noop_coroutine();
+            }
+
+            return caller;
         }
     };
 

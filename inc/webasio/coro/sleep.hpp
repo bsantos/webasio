@@ -45,11 +45,11 @@ struct promise_awaitable<sleep_t<std::chrono::duration<Rep, Period>>> {
     template<class... Ts>
     static auto get(promise_frame<Ts...>& frame, sleep_t<std::chrono::duration<Rep, Period>> arg)
     {
-        if (!frame.cached_steady_timer)
-            frame.cached_steady_timer = std::make_unique<boost::asio::steady_timer>(frame.get_executor());
+        if (!frame.steady_timer)
+            frame.steady_timer = std::make_unique<boost::asio::steady_timer>(frame.get_executor());
 
         return detail::basic_timer_awaitable<promise_frame<Ts...>, boost::asio::steady_timer&> {
-            frame, *frame.cached_steady_timer, arg.duration
+            frame, *frame.steady_timer, arg.duration
         };
     }
 };
@@ -59,11 +59,11 @@ struct promise_awaitable<sleep_t<std::chrono::time_point<std::chrono::steady_clo
     template<class... Ts>
     static auto get(promise_frame<Ts...>& frame, sleep_t<std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration<Rep, Period>>> arg)
     {
-        if (!frame.cached_steady_timer)
-            frame.cached_steady_timer = std::make_unique<boost::asio::steady_timer>(frame.get_executor());
+        if (!frame.steady_timer)
+            frame.steady_timer = std::make_unique<boost::asio::steady_timer>(frame.get_executor());
 
         return detail::basic_timer_awaitable<promise_frame<Ts...>, boost::asio::steady_timer&> {
-            frame, *frame.cached_steady_timer, arg.expiry_time
+            frame, *frame.steady_timer, arg.expiry_time
         };
     }
 };
