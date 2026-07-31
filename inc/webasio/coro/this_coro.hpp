@@ -104,30 +104,4 @@ struct reset_cancellation_state_t<> {
 
 inline constexpr reset_cancellation_state_t<> reset_cancellation_state;
 
-
-template<class... Options>
-struct sleep_t;
-
-template<class Rep, class Period>
-struct sleep_t<std::chrono::duration<Rep, Period>> {
-    std::chrono::duration<Rep, Period> duration;
-};
-
-template<class Clock, class Rep, class Period>
-struct sleep_t<std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>> {
-    std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>> expiry_time;
-};
-
-template<class Rep, class Period>
-inline auto sleep_for(std::chrono::duration<Rep, Period> duration)
-{
-    return sleep_t<std::chrono::duration<Rep, Period>> { duration };
-}
-
-template<class Clock, class Rep, class Period>
-inline auto sleep_until(std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>> expiry_time)
-{
-    return sleep_t<std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>> { expiry_time };
-}
-
 } // namespace webasio::this_coro

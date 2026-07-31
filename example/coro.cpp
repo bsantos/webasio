@@ -9,6 +9,7 @@
 
 #include <webasio/logger.hpp>
 #include <webasio/coro/dispatch.hpp>
+#include <webasio/coro/sleep.hpp>
 
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -34,9 +35,9 @@ co_detached say_hello(boost::asio::any_io_executor const& ex)
 co_promise<void> sleep()
 {
 	example_log.info("sleeping");
-	co_await this_coro::sleep_for(std::chrono::seconds(1));
+	co_await coro::sleep_for(std::chrono::seconds(1));
 	example_log.info("sleeping again");
-    co_await this_coro::sleep_for(std::chrono::seconds(1));
+    co_await coro::sleep_for(std::chrono::seconds(1));
     example_log.info("sleeping completed");
 }
 

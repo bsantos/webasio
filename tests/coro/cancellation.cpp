@@ -5,6 +5,7 @@
 #include <webasio/coro/detached.hpp>
 #include <webasio/coro/dispatch.hpp>
 #include <webasio/coro/promise.hpp>
+#include <webasio/coro/sleep.hpp>
 #include <webasio/scoped_final.hpp>
 #include <webasio/logger.hpp>
 

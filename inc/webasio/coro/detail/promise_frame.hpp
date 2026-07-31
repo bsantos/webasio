@@ -11,7 +11,6 @@
 #include <webasio/coro/detail/deferred_awaitable.hpp>
 #include <webasio/coro/detail/getter_awaitable.hpp>
 #include <webasio/coro/detail/dispatch_handler.hpp>
-#include <webasio/coro/detail/timer_awaitable.hpp>
 #include <webasio/coro/this_coro.hpp>
 #include <webasio/memory_cache.hpp>
 
@@ -252,30 +251,6 @@ struct promise_frame : promise_frame_base<Ts...> {
         cancellation_slot = arg.slot;
         cancellation_state = boost::asio::cancellation_state { cancellation_slot, std::move(arg.in_filter), std::move(arg.out_filter) };
         return std::suspend_never { };
-    }
-
-    template<class Rep, class Period>
-    auto await_transform(this_coro::sleep_t<std::chrono::duration<Rep, Period>> sleep)
-    {
-        if (!cached_steady_timer)
-            cached_steady_timer = std::make_unique<boost::asio::steady_timer>(get_executor());
-
-        return detail::basic_timer_awaitable<promise_frame, boost::asio::steady_timer&> { *this, *cached_steady_timer, sleep.duration };
-    }
-
-    template<class Rep, class Period>
-    auto await_transform(this_coro::sleep_t<std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration<Rep, Period>>> sleep)
-    {
-        if (!cached_steady_timer)
-            cached_steady_timer = std::make_unique<boost::asio::steady_timer>(get_executor());
-
-        return detail::basic_timer_awaitable<promise_frame, boost::asio::steady_timer&> { *this, *cached_steady_timer, sleep.expiry_time };
-    }
-
-    template<class Clock, class Rep, class Period>
-    auto await_transform(this_coro::sleep_t<std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>> sleep)
-    {
-        return detail::timer_awaitable<promise_frame, Clock> { *this, sleep.expiry_time };
     }
 };
 
