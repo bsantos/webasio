@@ -6,6 +6,7 @@
 #include <webasio/coro/promise.hpp>
 
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 
 #include <memory>
 #include <thread>
@@ -60,6 +61,42 @@ struct coro_test {
         co_await webasio::coro::dispatch(ioc2.get_executor());
         co_await foo1();
         tid2 = co_await get_thread_id();
+        completed = true;
+    }
+
+    webasio::co_promise<void> strand2()
+    {
+        co_await webasio::coro::dispatch(boost::asio::make_strand(ioc2));
+        tid2 = co_await get_thread_id();
+    }
+
+    // callee runs on a strand while the caller is on a different executor: final
+    // suspension must exit the strand and resume the caller back on ioc1
+    webasio::co_detached strand_caller_callee()
+    {
+        auto guard1 = boost::asio::make_work_guard(ioc1);
+        auto guard2 = boost::asio::make_work_guard(ioc2);
+
+        co_await webasio::coro::dispatch(ioc1.get_executor());
+        co_await strand2();
+        tid1 = co_await get_thread_id();
+        completed = true;
+    }
+
+    webasio::co_promise<void> strand1()
+    {
+        co_await webasio::coro::dispatch(boost::asio::make_strand(ioc1));
+        tid2 = co_await get_thread_id();
+    }
+
+    // callee on a strand whose caller has no executor of its own: final
+    // suspension must exit the strand and resume on the strand's inner executor
+    webasio::co_detached strand_root_caller()
+    {
+        auto guard1 = boost::asio::make_work_guard(ioc1);
+
+        co_await strand1();
+        tid1 = co_await get_thread_id();
         completed = true;
     }
 };
@@ -157,6 +194,47 @@ BOOST_AUTO_TEST_CASE(test_executor_caller_callee)
     BOOST_TEST(c.completed);
     BOOST_TEST(c.tid1 == tid1);
     BOOST_TEST(c.tid2 == tid2);
+}
+
+BOOST_AUTO_TEST_CASE(test_executor_strand_exit)
+{
+    coro_test c;
+    std::thread t1;
+    std::thread t2;
+    std::thread::id tid1;
+    std::thread::id tid2;
+
+	BOOST_CHECK_NO_THROW(c.strand_caller_callee());
+
+    t1 = std::thread([&]() { c.ioc1.run(); });
+    tid1 = t1.get_id();
+    t2 = std::thread([&]() { c.ioc2.run(); });
+    tid2 = t2.get_id();
+
+    t1.join();
+    t2.join();
+
+    BOOST_TEST(c.completed);
+    BOOST_TEST(c.tid1 == tid1);
+    BOOST_TEST(c.tid2 == tid2);
+}
+
+BOOST_AUTO_TEST_CASE(test_executor_strand_root)
+{
+    coro_test c;
+    std::thread t1;
+    std::thread::id tid1;
+
+	BOOST_CHECK_NO_THROW(c.strand_root_caller());
+
+    t1 = std::thread([&]() { c.ioc1.run(); });
+    tid1 = t1.get_id();
+
+    t1.join();
+
+    BOOST_TEST(c.completed);
+    BOOST_TEST(c.tid1 == tid1);
+    BOOST_TEST(c.tid2 == tid1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

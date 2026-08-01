@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <webasio/coro/detail/resume_context.hpp>
 #include <webasio/coro/unique_handle.hpp>
 #include <webasio/memory_cache.hpp>
 

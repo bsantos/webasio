@@ -14,6 +14,8 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/cancellation_state.hpp>
+#include <boost/asio/defer.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 
@@ -105,8 +107,8 @@ struct promise_frame : promise_frame_base<Ts...> {
     std::unique_ptr<boost::asio::steady_timer> steady_timer;
     boost::asio::cancellation_slot             cancellation_slot;
     boost::asio::cancellation_state            cancellation_state;
-    boost::asio::any_io_executor const*        caller_executor = std::addressof(executor);
     boost::asio::any_io_executor               executor;
+    boost::asio::any_io_executor const*        caller_executor = std::addressof(executor);
     boost::asio::any_io_executor               inner_executor;
 
     promise_frame() = default;
@@ -129,23 +131,12 @@ struct promise_frame : promise_frame_base<Ts...> {
     template<class Executor>
     void set_executor(Executor&& ex)
     {
-        executor = std::forward<Executor>(ex);
-
-        if (caller_executor == std::addressof(inner_executor)) {
-            caller_executor = std::addressof(executor);
-            inner_executor = nullptr;
-        }
-    }
-
-    template<class InnerExecutor>
-    void set_executor(boost::asio::strand<InnerExecutor>&& ex)
-    {
-        if (caller_executor == std::addressof(executor)) {
-            caller_executor = std::addressof(inner_executor);
+        if constexpr (requires(std::decay_t<Executor>& e) { { e.get_inner_executor() } -> std::convertible_to<boost::asio::any_io_executor>; })
             inner_executor = ex.get_inner_executor();
-        }
+        else
+            inner_executor = nullptr;
 
-        executor = std::move(ex);
+        executor = std::forward<Executor>(ex);
     }
 
     boost::asio::any_io_executor const& get_executor() const noexcept
@@ -169,13 +160,22 @@ struct promise_frame : promise_frame_base<Ts...> {
             promise_frame& callee_frame = callee.promise();
             std::coroutine_handle<> caller = callee_frame.caller.release();
 
-            // ensure the caller coroutine is resumed on it's executor
-            if (callee_frame.caller_executor != std::addressof(callee_frame.executor) && *callee_frame.caller_executor) {
-                boost::asio::dispatch(*callee_frame.caller_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
+            // ensure the caller coroutine is resumed on it's executor, if any and not the same.
+            // if strand executor is used, the callee must exit the strand before resuming the caller
+            if (callee_frame.caller_executor != std::addressof(callee_frame.executor) && callee_frame.executor) {
+                if (!callee_frame.inner_executor) {
+                    boost::asio::dispatch(*callee_frame.caller_executor, detail::dispatch_handler<final_awaitable> { *this, caller });
 
-                if (this->resume_awaiting(caller))
-                    return caller;
+                    if (this->resume_awaiting(caller))
+                        return caller;
+                }
+                else
+                    boost::asio::defer(*callee_frame.caller_executor, detail::dispatch_handler<> { caller });
 
+                return std::noop_coroutine();
+            }
+            else if (callee_frame.inner_executor) {
+                boost::asio::defer(callee_frame.inner_executor, detail::dispatch_handler<> { caller });
                 return std::noop_coroutine();
             }
 
@@ -198,13 +198,17 @@ struct promise_frame : promise_frame_base<Ts...> {
         template<class Caller>
         std::coroutine_handle<> await_suspend(std::coroutine_handle<Caller> caller) noexcept
         {
-            callee_.promise().caller.reset(caller);
+            auto& callee_frame = callee_.promise();
 
-            if constexpr (requires (Caller& p) { { p.get_executor() } -> std::same_as<boost::asio::any_io_executor const&>; })
-                callee_.promise().caller_executor = std::addressof(caller.promise().get_executor());
+            callee_frame.caller.reset(caller);
+
+            if constexpr (requires (Caller& p) { { p.get_executor() } -> std::same_as<boost::asio::any_io_executor const&>; }) {
+                if (auto const& executor = caller.promise().get_executor(); executor)
+                    callee_frame.caller_executor = std::addressof(executor);
+            }
 
             if constexpr (requires (Caller& p) { { p.get_cancellation_slot() } -> std::convertible_to<boost::asio::cancellation_slot>; })
-                callee_.promise().cancellation_slot = caller.promise().get_cancellation_slot();
+                callee_frame.cancellation_slot = caller.promise().get_cancellation_slot();
 
             return callee_;
         }
