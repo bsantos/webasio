@@ -31,7 +31,7 @@ add_library(webasio
   ../inc/webasio/coro/unique_handle.hpp
   ../inc/webasio/logger.hpp
   ../inc/webasio/memory_cache.hpp
-  ../inc/webasio/net/stream.hpp
+  ../inc/webasio/net/ip/stream.hpp
   ../inc/webasio/scoped_final.hpp
   ../inc/webasio/stddef.hpp
 
