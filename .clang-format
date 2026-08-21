@@ -1,0 +1,93 @@
+---
+# .clang-format file optimized for C++20, East-Const, and Stroustrup Bracing
+Language: Cpp
+BasedOnStyle: LLVM
+
+# --- Language Standard Settings ---
+# Targets modern C++20 language features, formatting concepts, and modules cleanly
+Standard: Latest
+
+# --- Const/Qualifier Settings (East-Const) ---
+# Automatically reformats 'const int' into 'int const' (East-Const layout)
+QualifierAlignment: Custom
+QualifierOrder: ['static', 'inline', 'constexpr', 'type', 'const', 'volatile']
+
+# --- Whitespace & Indentation ---
+AccessModifierOffset: -4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentPPDirectives: AfterHash
+
+# --- Line Length Restrictions ---
+# Disabled: the codebase places its own breaks and has many lines past 120.
+ColumnLimit: 0
+
+# --- Brace Wrapping (Stroustrup Style, empty bodies stay on one line) ---
+# Breaks before functions, else, and catch blocks while leaving 'if' braces attached
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+# --- Templates & Braced Init ---
+SpaceAfterTemplateKeyword: false
+BreakTemplateDeclarations: Yes
+Cpp11BracedListStyle: false
+SpaceBeforeCpp11BracedList: true
+
+# --- Padding & Spacing Details ---
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInParens: Never
+SpacesInSquareBrackets: false
+
+# --- Alignment ---
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
+
+# --- Pointer & Reference Alignment ---
+PointerAlignment: Left
+DerivePointerAlignment: false
+
+# --- Constructor Initializers ---
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: NextLine
+ConstructorInitializerIndentWidth: 4
+
+# --- Macro Interpretations ---
+#Macros:
+
+# --- Sorting & Miscellaneous ---
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+...
